@@ -15,17 +15,12 @@ fn main() -> io::Result<()> {
 
 fn get_input() -> Result<Vec<String>, io::Error> {
     let args: Vec<String> = env::args().collect();
+
     let path = Path::new(&args[1]);
     let mut file = File::open(&path)?;
     let mut buffer = String::new();
+
     file.read_to_string(&mut buffer)?;
-    Ok(buffer
-        .lines()
-        .filter_map(|line| {
-            if line.is_empty() {
-                None
-            } else {
-                Some(String::from(line))
-            }
-        }).collect())
+
+    Ok(buffer.lines().map(String::from).collect())
 }
