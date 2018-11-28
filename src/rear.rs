@@ -1,6 +1,6 @@
 pub fn solve(input: Vec<String>) -> String {
     let mut output: Vec<String> = Vec::new();
-    let input = convert(input);
+    let input = convert(&input);
     for (first, second) in input {
         let distance = {
             if first == second {
@@ -21,21 +21,19 @@ pub fn solve(input: Vec<String>) -> String {
 
 use std::str::FromStr;
 
-fn convert(input: Vec<String>) -> Vec<(Vec<u8>, Vec<u8>)> {
-    input
-        .split(|line| line.is_empty())
-        .map(|pair| {
-            (
-                pair[0]
-                    .split_whitespace()
-                    .map(|s| u8::from_str(s).unwrap())
-                    .collect::<Vec<_>>(),
-                pair[1]
-                    .split_whitespace()
-                    .map(|s| u8::from_str(s).unwrap())
-                    .collect::<Vec<_>>(),
-            )
-        }).collect::<Vec<_>>()
+fn convert<'a>(input: &'a [String]) -> impl Iterator<Item = (Vec<u8>, Vec<u8>)> + 'a {
+    input.split(|line| line.is_empty()).map(|pair| {
+        (
+            pair[0]
+                .split_whitespace()
+                .map(|s| u8::from_str(s).unwrap())
+                .collect::<Vec<_>>(),
+            pair[1]
+                .split_whitespace()
+                .map(|s| u8::from_str(s).unwrap())
+                .collect::<Vec<_>>(),
+        )
+    })
 }
 
 fn normalize_to_identity(first: &[u8], second: &[u8]) -> Vec<u8> {
@@ -43,7 +41,7 @@ fn normalize_to_identity(first: &[u8], second: &[u8]) -> Vec<u8> {
     normalized.push(0);
     normalized.extend(
         second
-            .into_iter()
+            .iter()
             .filter_map(|&d2| first.iter().position(|&d1| d1 == d2))
             .map(|d| (d + 1) as u8),
     );
@@ -51,48 +49,56 @@ fn normalize_to_identity(first: &[u8], second: &[u8]) -> Vec<u8> {
     normalized
 }
 
-fn get_distance_from_identity(starting_permutation: Vec<u8>) -> u32 {
+fn get_distance_from_identity(starting_permutation: Vec<u8>) -> usize {
     let mut distance = 0;
-    let max_distance = starting_permutation.len() as u32;
+    let max_distance = starting_permutation.len() - 2 - 1; // compensate for the two bookending items
+
     let mut permutations = vec![starting_permutation];
-    let mut min_num_breakpoints = get_breakpoints(&permutations[0]).len();
+    let mut next_permutations = vec![];
+
+    let mut min_num_breakpoints = usize::max_value();
+
     while distance < max_distance {
         distance += 1;
-        let mut new_permutations = vec![];
-        for permutation in permutations {
-            let breakpoints = get_breakpoints(&permutation);
+
+        for permutation in permutations.drain(..) {
+            let breakpoints: Vec<_> = get_breakpoints(&permutation).collect();
+
             for i in 0..breakpoints.len() {
                 for j in i + 1..breakpoints.len() {
                     if breakpoints[j] - breakpoints[i] > 1 {
                         let new_permutation =
                             reverse_strip(&permutation, breakpoints[i], breakpoints[j]);
-                        let new_breakpoint_count = get_breakpoints(&new_permutation).len();
-                        if new_breakpoint_count == 0 {
-                            return distance;
-                        } else if new_breakpoint_count < min_num_breakpoints {
-                            min_num_breakpoints = new_breakpoint_count;
-                            new_permutations.clear();
-                            new_permutations.push(new_permutation);
-                        } else if new_breakpoint_count == min_num_breakpoints {
-                            new_permutations.push(new_permutation);
+                        let new_breakpoint_count = get_breakpoints(&new_permutation).count();
+
+                        match new_breakpoint_count {
+                            0 => return distance,
+                            n if n < min_num_breakpoints => {
+                                min_num_breakpoints = n;
+                                next_permutations.clear();
+                                next_permutations.push(new_permutation);
+                            }
+                            n if n == min_num_breakpoints => {
+                                next_permutations.push(new_permutation)
+                            }
+                            _ => (),
                         }
                     }
                 }
             }
         }
-        permutations = new_permutations;
+
+        permutations.append(&mut next_permutations);
     }
     distance
 }
 
-fn get_breakpoints(permutation: &[u8]) -> Vec<usize> {
-    let mut breakpoints = Vec::new();
-    for i in 1..permutation.len() {
-        if i8::abs((permutation[i] as i8) - (permutation[i - 1] as i8)) > 1 {
-            breakpoints.push(i);
-        }
-    }
-    breakpoints
+fn get_breakpoints<'a>(permutation: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
+    permutation
+        .windows(2)
+        .enumerate()
+        .filter(|&(_, pair)| i8::abs(pair[1] as i8 - pair[0] as i8) > 1)
+        .map(|(index, _)| index + 1)
 }
 
 fn reverse_strip(permutation: &[u8], i: usize, j: usize) -> Vec<u8> {
